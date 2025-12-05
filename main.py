@@ -1,92 +1,111 @@
+import tkinter as tk
 import bcrypt
+
+# --------- FUNCIONES DE ARCHIVO ---------
 
 def cargar_datos():
     with open("datos.txt", "r") as archivo:
-        lineas = archivo.readlines()
+        linea = archivo.readline().strip()
+        clave, valor = linea.split(":")
+        return valor
 
-    datos = {}
-    for linea in lineas:
-        clave, valor = linea.strip().split(":")
-        datos[clave] = valor
-    return datos
-
-password = input("Dime tu contraseña: ").encode()
-
-# Cargar datos desde el archivo
-datos = cargar_datos()
-
-# Si la contraseña guardada es "unknown", significa que no hay contraseña creada
-if datos["password"] == "unknown":
-
-    # Crear hash NUEVO y guardarlo
-    hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
-
+def guardar_password(hashpw):
     with open("datos.txt", "w") as archivo:
-        archivo.write(f"password:{hashed}\n")
+        archivo.write(f"password:{hashpw}\n")
 
-    print("Acceso permitido")
+# --------- VENTANA PRINCIPAL ---------
 
-    # Menú para cambiar la contraseña
-    while True:
-        respuesta = input("Quieres cambiar la contraseña? ")
-        if respuesta.lower() == "si":
-            password = input("Dime la nueva contraseña: ").encode()
-            hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
+ventana = tk.Tk()
+ventana.title("Hasheador")
 
-            with open("datos.txt", "w") as archivo:
-                archivo.write(f"password:{hashed}\n")
+# --------- FUNCIONES DE INTERFAZ ---------
 
-            print("Contraseña cambiada exitosamente")
-        else:
-            print("Saliendo de la app...")
-            break
+def mostrar_mensaje(texto):
+    """Muestra un mensaje en la ventana"""
+    limpiar_ventana()
+    tk.Label(ventana, text=texto).grid(row=0, column=0, columnspan=2, pady=10)
 
-else:
-    # Recuperar el hash guardado en el archivo
-    password_guardada = datos["password"].encode()
+def limpiar_ventana():
+    """Elimina todos los widgets actuales"""
+    for widget in ventana.winfo_children():
+        widget.destroy()
 
-    # Verificar contraseña ingresada contra hash guardado
-    if bcrypt.checkpw(password, password_guardada):
-        print("Acceso permitido")
-        while True:
-            respuesta = input("Quieres cambiar la contraseña? ")
-            if respuesta.lower() == "si":
-                password = input("Dime la nueva contraseña: ").encode()
-                hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
+def pedir_contraseña():
+    """Pantalla para introducir contraseña"""
+    limpiar_ventana()
 
-                with open("datos.txt", "w") as archivo:
-                    archivo.write(f"password:{hashed}\n")
+    tk.Label(ventana, text="Introduce tu contraseña:").grid(row=0, column=0, columnspan=2, pady=10)
+    entrada = tk.Entry(ventana, show="*")
+    entrada.grid(row=1, column=0, columnspan=2)
 
-                print("Contraseña cambiada exitosamente")
-            else:
-                print("Saliendo de la app...")
-                break
+    tk.Button(ventana, text="Aceptar",
+              command=lambda: verificar_contraseña(entrada.get())
+    ).grid(row=2, column=0, columnspan=2, pady=10)
+
+def menu_cambio():
+    """Pregunta si quiere cambiar la contraseña"""
+    limpiar_ventana()
+
+    tk.Label(ventana, text="¿Quieres cambiar la contraseña?").grid(
+        row=0, column=0, columnspan=2, pady=10
+    )
+
+    tk.Button(
+        ventana,
+        text="Sí",
+        command=pedir_nueva_contraseña
+    ).grid(row=1, column=0, padx=10)
+
+    tk.Button(
+        ventana,
+        text="No",
+        command=lambda: (mostrar_mensaje("Saliendo..."), ventana.after(1500, ventana.destroy()))
+    ).grid(row=1, column=1, padx=10)
+
+def pedir_nueva_contraseña():
+    """Pantalla para introducir nueva contraseña"""
+    limpiar_ventana()
+
+    tk.Label(ventana, text="Introduce la nueva contraseña:").grid(row=0, column=0, columnspan=2, pady=10)
+    entrada = tk.Entry(ventana, show="*")
+    entrada.grid(row=1, column=0, columnspan=2)
+
+    tk.Button(ventana, text="Cambiar",
+              command=lambda: cambiar_contraseña(entrada.get())
+    ).grid(row=2, column=0, columnspan=2, pady=10)
+
+def cambiar_contraseña(nueva_pw):
+    if nueva_pw.strip() == "":
+        mostrar_mensaje("La contraseña no puede estar vacía")
+        ventana.after(1500, pedir_nueva_contraseña)
+        return
+
+    hashed = bcrypt.hashpw(nueva_pw.encode(), bcrypt.gensalt()).decode()
+    guardar_password(hashed)
+
+    mostrar_mensaje("Contraseña cambiada")
+    ventana.after(1500, menu_cambio)
+
+def verificar_contraseña(pw_introducida):
+    guardada = cargar_datos()
+
+    if guardada == "unknown":
+        # Primera contraseña
+        hashed = bcrypt.hashpw(pw_introducida.encode(), bcrypt.gensalt()).decode()
+        guardar_password(hashed)
+        mostrar_mensaje("Contraseña creada")
+        ventana.after(1500, menu_cambio)
+        return
+
+    # Verificar bcrypt
+    if bcrypt.checkpw(pw_introducida.encode(), guardada.encode()):
+        mostrar_mensaje("Acceso permitido")
+        ventana.after(1500, menu_cambio)
     else:
-        print("Acceso denegado")
-        while True:
-            respuesta = input("Quieres probar otra vez?")
-            if respuesta.lower() == "si":
-                password = input("Dime tu contraseña: ").encode()
-                password_guardada = datos["password"].encode()
-                if bcrypt.checkpw(password, password_guardada):
-                    print("Acceso permitido")
-                    while True:
-                        respuesta = input("Quieres cambiar la contraseña? ")
-                        if respuesta.lower() == "si":
-                            password = input("Dime la nueva contraseña: ").encode()
-                            hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
+        mostrar_mensaje("Acceso denegado")
+        ventana.after(1500, pedir_contraseña)
 
-                            with open("datos.txt", "w") as archivo:
-                                archivo.write(f"password:{hashed}\n")
+# --------- INICIO ---------
 
-                            print("Contraseña cambiada exitosamente")
-                        else:
-                            print("Saliendo de la app...")
-                            break
-                    break
-
-                else:
-                    print("contraseña incorrecta")
-            else:
-                print("Saliendo de la app...")
-                break
+pedir_contraseña()
+ventana.mainloop()
